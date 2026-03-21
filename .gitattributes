@@ -1,0 +1,23 @@
+# Автоматическое определение текстовых файлов и нормализация окончаний строк к LF в репозитории
+* text=auto
+
+# Явное указание Promela файлов как текстовых с принудительными LF (рекомендуется для Spin)
+*.pml text eol=lf
+*.p text eol=lf
+*.prp text eol=lf
+
+# Специфические для Spin файлы свойств и LTL
+*.ltl text eol=lf
+
+# Вспомогательные скрипты
+*.sh text eol=lf
+*.bat text eol=crlf
+
+# Настройка подсветки синтаксиса (для GitHub Linguist)
+*.pml linguist-language=Promela
+*.p linguist-language=Promela
+
+# Бинарные файлы (графика, PDF и т.д.)
+*.png binary
+*.jpg binary
+*.pdf binary
