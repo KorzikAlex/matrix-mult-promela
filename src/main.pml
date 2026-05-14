@@ -1,26 +1,42 @@
 #define N 5
 
 init {
-	int arr[N] = 0;
-	int i;
-	
-// заполним массив числами от 1 до 5
-	i = 0;
-	do
-	:: i < N -> 
-		arr[i] = i + 1;
-		i++
-	:: else -> 
-		break
-	od;
-	
-// теперь выведем массив построчно
-	i = 0;
-	do
-	:: i < N -> 
-		printf("%d\n",arr[i]);
-		i++
-	:: else -> 
-		break // просто завершаем процесс
-	od;
+	// Инициализируем двумерный массив одним куском в памяти
+    int arr[N*N];
+    int i, j;
+    
+    // заполним матрицу числами от 1 до 25
+    i = 0;
+    do
+    :: i < N ->
+        j = 0;
+        do
+        :: j < N ->
+            arr[i * N + j] = i * N + j + 1;
+            j++
+        :: else ->
+            break
+        od;
+        i++
+    :: else ->
+        break
+    od;
+    
+    // выведем матрицу построчно
+    i = 0;
+    do
+    :: i < N ->
+        j = 0;
+        do
+        :: j < N ->
+            printf("%d", arr[i * N + j]);
+            j++
+        :: else ->
+            break
+        od;
+        printf("\n");
+        i++
+    :: else ->
+        break
+    od;
 }
