@@ -17,3 +17,5 @@ _spin_nvr.tmp
 # Логи и отчеты верификации
 *.log
 *.pml.txt
+
+.idea

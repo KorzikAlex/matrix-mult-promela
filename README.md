@@ -26,7 +26,7 @@ sudo apt install yacc tcl tk gcc make
 Для `Fedora`
 
 ```bash
-sudo dnf install spin yacc tcl8 tk8 gcc make
+sudo dnf install yacc tcl8 tk8 gcc make
 ```
 
 ## Установка Spin
