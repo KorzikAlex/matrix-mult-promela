@@ -3,9 +3,9 @@
 * Вариант 2(3)
 */ 
 // Размерность матриц
-#define N 3 
+#define N 5
 // Количество процессов для параллельного умножения
-#define P 2 
+#define P 3 
 // Процесс, который будет выводить результат
 #define STOP_P 0
 
@@ -17,32 +17,34 @@ int B[N * N];
 // C - результат умножения A и B
 int C[N * N];
 
-// Печать матрицы N * N
-inline printMatrix(M) 
+// Разделяемые флаги завершения для каждого Worker'а
+byte done[P];
+
+//Заполняет единичную матрицу
+inline identityMatrix(M)
 {
-	int id = 0;
-	do
-	:: id < N -> 
-		int jd = 0;
-		do
-		:: jd < N -> 
-			printf("%d ",M[id * N + jd]);
-			jd++
-		:: else -> 
-			break
-		od;
-		printf("\n");
-		id++
-	:: else -> 
-		break
-	od;
+	i = 0;
+	i = 0;
+    do
+    :: i < N ->
+        j = 0;
+        do
+        :: j < N ->
+            if
+            :: i == j -> M[i*N + j] = 1
+            :: else   -> M[i*N + j] = 0
+            fi;
+            j++
+        :: else -> break
+        od;
+        i++
+    :: else -> break
+    od;
 }
 
-init {
-	int i,j,k;
-	int sum;
-	
-// Инициализация матрицы A (заполняем числами от 1 до N*N)
+// Заполняет матрицу числами от 1 до N*N
+inline sequenceMatrix(M)
+{
 	i = 0;
 	do
 	:: i < N -> 
@@ -58,70 +60,112 @@ init {
 	:: else -> 
 		break
 	od;
-	
-// Инициализация матрицы B (единичная матрица)
-	i = 0;
-	do
-	:: i < N -> 
-		j = 0;
-		do
-		:: j < N -> 
-			B[i * N + j] = 1;
-			j++
-		:: else -> 
-			break
-		od;
-		i++
-	:: else -> 
-		break
-	od;
-	
-// Умножение матриц A и B, результат сохраняется в C
-	i = 0;
-	do
-	:: i < N -> 
-		j = 0;
-		do
-		:: j < N -> 
-			sum = 0;
-			k = 0;
-			do
-			:: k < N -> 
-				sum = sum + A[i * N + k] * B[k * N + j];
-				k++
-			:: else -> 
-				break
-			od;
-			C[i * N + j] = sum;
-			j++
-		:: else -> 
-			break
-		od;
-		i++
-	:: else -> 
-		break
-	od;
-	
-// Вывод матрицы A
-	printf("Matrix A:\n");
-	printMatrix(A);
-	
-// Вывод матрицы B
-	printf("Matrix B:\n");
-	printMatrix(B);
-	
-// Вывод матрицы C
-	printf("Matrix C:\n");
-	printMatrix(C);
-
-  // run Worker(STOP_P);
 }
 
-// proctype Worker(byte pid)
-// {
-//     if
-//     :: pid == STOP_P ->
-//         printMatrix(C)
-//     :: else -> skip
-//     fi
-// }
+inline randomMatrix(M, lo, hi)
+{
+    i = 0;
+    do
+    :: fi < N ->
+        j = 0;
+        do
+        :: j < N ->
+            select(M[fi*N + j] : lo .. hi);
+            j++
+        :: else -> break
+        od;
+        fi++
+    :: else -> break
+    od
+}
+
+// Печать матрицы N * N
+inline printMatrix(M) 
+{
+	i = 0;
+	do
+	:: i < N -> 
+		j = 0;
+		do
+		:: j < N -> 
+			printf("%d ",M[i * N + j]);
+			j++
+		:: else -> 
+			break
+		od;
+		printf("\n");
+		i++
+	:: else -> 
+		break
+	od;
+}
+
+init {
+	int i,j;
+	int p;
+
+	sequenceMatrix(A);
+	identityMatrix(B);	
+
+// Запуск P параллельных Worker'ов
+    p = 0;
+    do
+    :: p < P ->
+        run Worker(p);
+        p++
+    :: else -> break
+    od;
+}
+
+/* Worker wid вычисляет столбцы C[*, j] для j ? [j_start, j_end) */
+proctype Worker(byte wid)
+{
+    int j_start, j_end;
+    int i, j, k;
+    int s;
+	int p;
+
+    j_start = (N * wid) / P;
+    j_end   = (N * (wid + 1)) / P;
+
+    i = 0;
+    do
+    :: i < N ->
+        j = j_start;
+        do
+        :: j < j_end ->
+            s = 0;
+            k = 0;
+            do
+            :: k < N ->
+                s = s + A[i*N + k] * B[k*N + j];
+                k++
+            :: else -> break
+            od;
+            C[i*N + j] = s;
+            j++
+        :: else -> break
+        od;
+        i++
+    :: else -> break
+    od;
+
+    done[wid] = 1;
+	// Один из процессов выводит матрицу по завершении умножения
+	if
+	:: wid == STOP_P ->
+		p = 0;
+		do
+		:: p < P ->
+			(done[p] == 1);
+			p++
+		:: else -> break
+		od;
+		printf("Матрица A:\n");
+		printMatrix(A);
+		printf("Матрица B:\n");
+		printMatrix(B);
+		printf("Произведение A и B:\n");
+		printMatrix(C);
+	fi
+}
