@@ -117,13 +117,12 @@ init {
     od;
 }
 
-/* Worker wid вычисляет столбцы C[*, j] для j ? [j_start, j_end) */
+// Worker wid вычисляет столбцы C[*, j] для j_start >= j > j_end 
 proctype Worker(byte wid)
 {
     int j_start, j_end;
     int i, j, k;
     int s;
-	int p;
 
     j_start = (N * wid) / P;
     j_end   = (N * (wid + 1)) / P;
@@ -143,6 +142,8 @@ proctype Worker(byte wid)
             :: else -> break
             od;
             C[i*N + j] = s;
+			// можно увидеть, какой по счету процесс ответственный за какие столбцы
+			// C[i*N + j] = wid;
             j++
         :: else -> break
         od;
@@ -154,9 +155,10 @@ proctype Worker(byte wid)
 	// Один из процессов выводит матрицу по завершении умножения
 	if
 	:: wid == STOP_P ->
-		p = 0;
+		int p = 0;
 		do
 		:: p < P ->
+			// Ожидание завершения всех процессов
 			(done[p] == 1);
 			p++
 		:: else -> break
