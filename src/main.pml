@@ -6,8 +6,6 @@
 #define N 3
 // Количество процессов для параллельного умножения
 #define P 3 
-// Процесс, который будет выводить результат
-#define STOP_P 0
 
 // Инициализируем три матрицы для умножения
 // A - первая матрица
@@ -17,70 +15,25 @@ int B[N * N];
 // C - результат умножения A и B
 int C[N * N];
 
-// Счетчик работающих Workerов
-int workers_active = 0;
+byte workers_active = 0;
+
+// Задания воркеров: task_column[p] == -1      — воркер свободен (ждёт задачи),
+//                                      0..N-1 — столбец для вычисления,
+//                                      N      — сигнал завершения (stop)
+int task_column[P];
 
 // Флаг соответствия матрицы C произведению матриц A и B
 byte product_is_valid = 0;
 
-//Заполняет единичную матрицу
-inline identityMatrix(M)
+inline init_matrices()
 {
-	i = 0;
-	i = 0;
-    do
-    :: i < N ->
-        j = 0;
-        do
-        :: j < N ->
-            if
-            :: i == j -> M[i*N + j] = 1
-            :: else   -> M[i*N + j] = 0
-            fi;
-            j++
-        :: else -> break
-        od;
-        i++
-    :: else -> break
-    od;
-}
+    A[0] = 1; A[1] = 3; A[2] = 7;
+	A[3] = 9; A[4] = 2; A[5] = 0;
+	A[6] = 23; A[7] = 0; A[8] = 4;
 
-// Заполняет матрицу числами от 1 до N*N
-inline sequenceMatrix(M)
-{
-	i = 0;
-	do
-	:: i < N -> 
-		j = 0;
-		do
-		:: j < N -> 
-			M[i * N + j] = i * N + j + 1;
-			j++
-		:: else -> 
-			break
-		od;
-		i++
-	:: else -> 
-		break
-	od;
-}
-
-inline Matrix3_1(M){
-	M[0] = 1; M[1] = 3; M[2] = 7;
-	M[3] = 9; M[4] = 2; M[5] = 0;
-	M[6] = 23; M[7] = 0; M[8] = 4;
-}
-
-inline Matrix3_2(M){
-	M[0] = 9; M[1] = 7; M[2] = 4;
-	M[3] = 71; M[4] =12; M[5] = 5;
-	M[6] = 0; M[7] = 0; M[8] = 1;
-}
-
-inline init_matrices(M1, M2)
-{
-	Matrix3_1(M1);
-	Matrix3_2(M2);
+    B[0] = 9; B[1] = 7; B[2] = 4;
+	B[3] = 71; B[4] = 12; B[5] = 5;
+	B[6] = 0; B[7] = 0; B[8] = 1;
 }
 
 // Печать матрицы N * N
@@ -108,7 +61,7 @@ inline printMatrix(M)
 // Устанавливает product_is_valid = 1 если C == A*B, иначе оставляет 0.
 inline validateMatrixProduct()
 {
-    int vi, vj, vk, vsum;
+    byte vi, vj, vk, vsum;
     byte vvalid;
     vvalid = 1;
     vi = 0;
@@ -142,85 +95,99 @@ inline validateMatrixProduct()
 }
 
 init {
-	int i,j;
-	int p;
+    byte i, j, p;
+    byte next_col;
 
-	init_matrices(A, B)
+    init_matrices();
 
-// Запуск P параллельных Worker'ов
+    // все воркеры стартуют как свободные
     p = 0;
     do
-    :: p < P ->
-        run Worker(p);
-        p++
+    :: p < P -> task_column[p] = -1; p++
     :: else -> break
     od;
+
+    // запуск P воркеров
+    p = 0;
+    do
+    :: p < P -> run Worker(p); p++
+    :: else -> break
+    od;
+
+    next_col = 0;
+
+    // менеджер: недетерминированно выбирает любого свободного воркера и выдаёт задачу
+    do
+    :: workers_active > 0 ->
+        if
+        :: task_column[0] == -1 ->
+            if :: next_col < N -> task_column[0] = next_col; next_col++
+               :: else         -> task_column[0] = N
+            fi
+        :: task_column[1] == -1 ->
+            if :: next_col < N -> task_column[1] = next_col; next_col++
+               :: else         -> task_column[1] = N
+            fi
+        :: task_column[2] == -1 ->
+            if :: next_col < N -> task_column[2] = next_col; next_col++
+               :: else         -> task_column[2] = N
+            fi
+        :: else -> skip  // все воркеры заняты — ждём
+        fi
+    :: else -> break
+    od;
+
+    // все воркеры завершились — выводим результат
+    printf("Матрица A:\n");
+    printMatrix(A);
+    printf("Матрица B:\n");
+    printMatrix(B);
+    printf("Произведение A и B:\n");
+    printMatrix(C);
+    validateMatrixProduct();
+    printf("Результат проверен: C == A*B\n");
 }
 
-// Worker wid вычисляет столбцы C[*, j] для j_start >= j > j_end 
+// Worker ждёт задачу от менеджера, вычисляет столбец, сигнализирует готовность
 proctype Worker(byte wid)
 {
-	workers_active++;
-    int j_start, j_end;
-    int i, j, k;
-    int s;
-
-    j_start = (N * wid) / P;
-    j_end   = (N * (wid + 1)) / P;
-
-    i = 0;
+    workers_active++;
+    byte my_col, i, k, s;
     do
-    :: i < N ->
-        j = j_start;
-        do
-        :: j < j_end ->
-            s = 0;
-            k = 0;
+    :: true ->
+        // ждать пока менеджер выдаст задачу
+        (task_column[wid] != -1);
+        if
+        :: task_column[wid] == N -> break // сигнал остановки
+        :: else ->
+            my_col = task_column[wid];
+            // вычислить столбец my_col
+            i = 0;
             do
-            :: k < N ->
-                s = s + A[i*N + k] * B[k*N + j];
-                k++
+            :: i < N ->
+                s = 0;
+                k = 0;
+                do
+                :: k < N ->
+                    s = s + A[i*N + k] * B[k*N + my_col];
+                    k++
+                :: else -> break
+                od;
+                C[i*N + my_col] = s;
+                C[i*N + my_col] = wid;
+                i++
             :: else -> break
-            od;
-            C[i*N + j] = s;
-			// можно увидеть, какой по счету процесс ответственный за какие столбцы
-			// C[i*N + j] = wid;
-            j++
-        :: else -> break
-        od;
-        i++
-    :: else -> break
+            od
+            task_column[wid] = -1; // готов к новой задаче
+        fi
     od;
-
-	// Один из процессов выводит матрицу по завершении умножения
-	if
-	:: wid == STOP_P ->
-		int p = 0;
-		do
-		:: p < P ->
-			// Ожидание завершения всех остальных процессов
-			(workers_active == 1);
-			p++
-		:: else -> break
-		od;
-		printf("Матрица A:\n");
-		printMatrix(A);
-		printf("Матрица B:\n");
-		printMatrix(B);
-		printf("Произведение A и B:\n");
-		printMatrix(C);
-		validateMatrixProduct();
-		printf("Результат проверен: C == A*B\n");
-	:: else -> skip
-	fi
-	workers_active--;
+    workers_active--;
 }
 
 #define no_active_workers   (workers_active == 0)
-#define all_workers_active  (workers_active == P)
 #define some_workers_active (workers_active > 0)
-#define valid_worker_count (workers_active >= 0 && workers_active <= P)
-#define valid_product (product_is_valid == 1)
+#define valid_worker_count  (workers_active >= 0 && workers_active <= P)
+#define valid_product       (product_is_valid == 1)
 
 // Программа точно заканчивает работу
 ltl termination     { <> ([] no_active_workers) }
