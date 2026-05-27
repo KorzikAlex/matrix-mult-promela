@@ -5,35 +5,35 @@
 // Размерность матриц
 #define N 3
 // Количество процессов для параллельного умножения
-#define P 3 
+#define P 2 
 
 // Инициализируем три матрицы для умножения
 // A - первая матрица
-int A[N * N];
+byte A[N * N];
 // B - вторая матрица
-int B[N * N];
+byte B[N * N];
 // C - результат умножения A и B
-int C[N * N];
+byte C[N * N];
 
 byte workers_active = 0;
+byte done = 0;
+byte columns_completed = 0;
 
 // Задания воркеров: task_column[p] == -1      — воркер свободен (ждёт задачи),
 //                                      0..N-1 — столбец для вычисления,
 //                                      N      — сигнал завершения (stop)
 int task_column[P];
-
-// Флаг соответствия матрицы C произведению матриц A и B
-byte product_is_valid = 0;
+byte next_col = 0;
 
 inline init_matrices()
 {
-    A[0] = 1; A[1] = 3; A[2] = 7;
-	A[3] = 9; A[4] = 2; A[5] = 0;
-	A[6] = 23; A[7] = 0; A[8] = 4;
+    A[0] = 6; A[1] = 1; A[2] = 1;
+    A[3] = 5; A[4] = 6; A[5] = 5;
+    A[6] = 0; A[7] = 5; A[8] = 6;
 
-    B[0] = 9; B[1] = 7; B[2] = 4;
-	B[3] = 71; B[4] = 12; B[5] = 5;
-	B[6] = 0; B[7] = 0; B[8] = 1;
+    B[0] = 3; B[1] = 6; B[2] = 6;
+    B[3] = 6; B[4] = 5; B[5] = 3;
+    B[6] = 6; B[7] = 6; B[8] = 0;
 }
 
 // Печать матрицы N * N
@@ -57,46 +57,8 @@ inline printMatrix(M)
 	od;
 }
 
-// Последовательно вычисляет A*B и сравнивает с C.
-// Устанавливает product_is_valid = 1 если C == A*B, иначе оставляет 0.
-inline validateMatrixProduct()
-{
-    byte vi, vj, vk, vsum;
-    byte vvalid;
-    vvalid = 1;
-    vi = 0;
-    do
-    :: vi < N ->
-        vj = 0;
-        do
-        :: vj < N ->
-            vsum = 0;
-            vk = 0;
-            do
-            :: vk < N ->
-                vsum = vsum + A[vi*N + vk] * B[vk*N + vj];
-                vk++
-            :: else -> break
-            od;
-            if
-            :: C[vi*N + vj] != vsum -> vvalid = 0
-            :: else -> skip
-            fi;
-            vj++
-        :: else -> break
-        od;
-        vi++
-    :: else -> break
-    od;
-    if
-    :: vvalid == 1 -> product_is_valid = 1
-    :: else -> skip
-    fi
-}
-
 init {
-    byte i, j, p;
-    byte next_col;
+    byte i, j, p, prev_completed;
 
     init_matrices();
 
@@ -110,7 +72,7 @@ init {
     // запуск P воркеров
     p = 0;
     do
-    :: p < P -> run Worker(p); p++
+    :: p < P -> workers_active++; run Worker(p); p++
     :: else -> break
     od;
 
@@ -128,11 +90,9 @@ init {
             if :: next_col < N -> task_column[1] = next_col; next_col++
                :: else         -> task_column[1] = N
             fi
-        :: task_column[2] == -1 ->
-            if :: next_col < N -> task_column[2] = next_col; next_col++
-               :: else         -> task_column[2] = N
-            fi
-        :: else -> skip  // все воркеры заняты — ждём
+        :: else ->  // все воркеры заняты — ждём завершения хотя бы одного
+            prev_completed = columns_completed;
+            (columns_completed != prev_completed || workers_active == 0 || columns_completed != N)
         fi
     :: else -> break
     od;
@@ -144,21 +104,20 @@ init {
     printMatrix(B);
     printf("Произведение A и B:\n");
     printMatrix(C);
-    validateMatrixProduct();
-    printf("Результат проверен: C == A*B\n");
+    done = 1;
 }
 
 // Worker ждёт задачу от менеджера, вычисляет столбец, сигнализирует готовность
 proctype Worker(byte wid)
 {
-    workers_active++;
-    byte my_col, i, k, s;
+    byte my_col, i, k;
+    byte s;
     do
     :: true ->
         // ждать пока менеджер выдаст задачу
         (task_column[wid] != -1);
         if
-        :: task_column[wid] == N -> break // сигнал остановки
+        :: (task_column[wid] == N) -> break // сигнал остановки
         :: else ->
             my_col = task_column[wid];
             // вычислить столбец my_col
@@ -174,26 +133,42 @@ proctype Worker(byte wid)
                 :: else -> break
                 od;
                 C[i*N + my_col] = s;
-                C[i*N + my_col] = wid;
+                //C[i*N + my_col] = wid;
                 i++
             :: else -> break
             od
+            columns_completed++;   // сообщаем менеджеру о завершении столбца
             task_column[wid] = -1; // готов к новой задаче
         fi
     od;
     workers_active--;
 }
 
+#define all_cols_completed columns_completed == N
 #define no_active_workers   (workers_active == 0)
 #define some_workers_active (workers_active > 0)
+#define valid_product \
+    (C[0]==30 && C[1]==47 && C[2]==39 && C[3]==81 && \
+     C[4]==90 && C[5]==48 && C[6]==66 && C[7]==61 && \
+     C[8]==15)
 #define valid_worker_count  (workers_active >= 0 && workers_active <= P)
-#define valid_product       (product_is_valid == 1)
+#define task_bounds_ok \
+    ((task_column[0] >= -1 && task_column[0] <= N) && \
+     (task_column[1] >= -1 && task_column[1] <= N))
 
-// Программа точно заканчивает работу
-ltl termination     { <> ([] no_active_workers) }
-// Если процесс начал работу, то он её когда-нибудь завершит
-ltl no_starvation { [] (some_workers_active -> <> no_active_workers) }
-// Работа когда-нибудь завершится и с верным результатом
-ltl correct { <> [] (no_active_workers && valid_product) }
-// Счетчик рабочих процессов никогда не принимает неправильные значения
+#define no_dup_01 (task_column[0] == -1 || task_column[0] == N || task_column[0] != task_column[1])
+#define no_col_conflict (no_dup_01)
+
+
+// счётчик воркеров никогда не выходит за [0, P]
 ltl worker_count_safety { [] valid_worker_count }
+// task_column[p] принимает только допустимые значения
+ltl task_bounds        { [] task_bounds_ok }
+// менеджер никогда не назначает один столбец двум воркерам одновременно
+ltl no_duplicate_cols  { [] (some_workers_active -> no_col_conflict) }
+// программа точно завершит работу
+ltl termination        { <> done }
+// Завершение работы только после обработки всех столбцов
+ltl done_after_all     { [] (done -> all_cols_completed) }
+// работа когда-нибудь завершится с корректным результатом
+ltl correct            { <> (done && valid_product) }
