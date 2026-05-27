@@ -27,15 +27,15 @@ byte next_col = 0;
 
 inline init_matrices()
 {
-    A[0] = 3; A[1] = 4; A[2] = 4; A[3] = 2;
-    A[4] = 3; A[5] = 6; A[6] = 1; A[7] = 4;
-    A[8] = 3; A[9] = 1; A[10] = 0; A[11] = 8;
-    A[12] = 3; A[13] = 6; A[14] = 5; A[15] = 5;
+    A[0] = 2; A[1] = 4; A[2] = 6; A[3] = 4;
+    A[4] = 5; A[5] = 7; A[6] = 1; A[7] = 0;
+    A[8] = 7; A[9] = 6; A[10] = 2; A[11] = 2;
+    A[12] = 7; A[13] = 2; A[14] = 6; A[15] = 1;
 
-    B[0] = 0; B[1] = 5; B[2] = 2; B[3] = 3;
-    B[4] = 8; B[5] = 4; B[6] = 7; B[7] = 0;
-    B[8] = 6; B[9] = 8; B[10] = 7; B[11] = 5;
-    B[12] = 2; B[13] = 7; B[14] = 6; B[15] = 5;
+    B[0] = 3; B[1] = 2; B[2] = 3; B[3] = 5;
+    B[4] = 1; B[5] = 8; B[6] = 6; B[7] = 4;
+    B[8] = 6; B[9] = 0; B[10] = 2; B[11] = 6;
+    B[12] = 0; B[13] = 1; B[14] = 4; B[15] = 0;
 }
 
 // Печать матрицы N * N
@@ -96,9 +96,7 @@ init {
             if :: next_col < N -> task_column[2] = next_col; next_col++
                :: else         -> task_column[2] = N
             fi
-        :: else ->  // все воркеры заняты - ждём: завершения или освобождения слота
-            (workers_active == 0 ||
-             task_column[0] == -1 || task_column[1] == -1 || task_column[2] == -1)
+        :: workers_active == 0 -> break
         fi
     :: else -> break
     od;
@@ -143,8 +141,8 @@ proctype Worker(byte wid)
                 i++
             :: else -> break
             od
-            task_column[wid] = -1; // освобождаем слот (менеджер увидит при пробуждении)
-            columns_completed++;   // сигнал менеджеру: прогресс сделан
+            task_column[wid] = -1; // освобождаем слот
+            columns_completed++;
         fi
     od;
     workers_active--;
@@ -154,10 +152,10 @@ proctype Worker(byte wid)
 #define no_active_workers   (workers_active == 0)
 #define some_workers_active (workers_active > 0)
 #define valid_product \
-    (C[0]==60 && C[1]==77 && C[2]==74 && C[3]==39 && \
-     C[4]==62 && C[5]==75 && C[6]==79 && C[7]==34 && \
-     C[8]==24 && C[9]==75 && C[10]==61 && C[11]==49 && \
-     C[12]==88 && C[13]==114 && C[14]==113 && C[15]==59)
+    (C[0]==46 && C[1]==40 && C[2]==58 && C[3]==62 && \
+     C[4]==28 && C[5]==66 && C[6]==59 && C[7]==59 && \
+     C[8]==39 && C[9]==64 && C[10]==69 && C[11]==71 && \
+     C[12]==59 && C[13]==31 && C[14]==49 && C[15]==79)
 #define valid_worker_count  (workers_active >= 0 && workers_active <= P)
 #define task_bounds_ok \
     ((task_column[0] >= -1 && task_column[0] <= N) && \
