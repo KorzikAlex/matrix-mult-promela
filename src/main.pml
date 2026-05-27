@@ -3,9 +3,9 @@
 * Вариант 2(3)
 */ 
 // Размерность матриц
-#define N 3
+#define N 4
 // Количество процессов для параллельного умножения
-#define P 2 
+#define P 3 
 
 // Инициализируем три матрицы для умножения
 // A - первая матрица
@@ -27,13 +27,15 @@ byte next_col = 0;
 
 inline init_matrices()
 {
-    A[0] = 6; A[1] = 1; A[2] = 1;
-    A[3] = 5; A[4] = 6; A[5] = 5;
-    A[6] = 0; A[7] = 5; A[8] = 6;
+    A[0] = 3; A[1] = 4; A[2] = 4; A[3] = 2;
+    A[4] = 3; A[5] = 6; A[6] = 1; A[7] = 4;
+    A[8] = 3; A[9] = 1; A[10] = 0; A[11] = 8;
+    A[12] = 3; A[13] = 6; A[14] = 5; A[15] = 5;
 
-    B[0] = 3; B[1] = 6; B[2] = 6;
-    B[3] = 6; B[4] = 5; B[5] = 3;
-    B[6] = 6; B[7] = 6; B[8] = 0;
+    B[0] = 0; B[1] = 5; B[2] = 2; B[3] = 3;
+    B[4] = 8; B[5] = 4; B[6] = 7; B[7] = 0;
+    B[8] = 6; B[9] = 8; B[10] = 7; B[11] = 5;
+    B[12] = 2; B[13] = 7; B[14] = 6; B[15] = 5;
 }
 
 // Печать матрицы N * N
@@ -58,7 +60,7 @@ inline printMatrix(M)
 }
 
 init {
-    byte i, j, p, prev_completed;
+    byte i, j, p;
 
     init_matrices();
 
@@ -90,9 +92,13 @@ init {
             if :: next_col < N -> task_column[1] = next_col; next_col++
                :: else         -> task_column[1] = N
             fi
-        :: else ->  // все воркеры заняты — ждём завершения хотя бы одного
-            prev_completed = columns_completed;
-            (columns_completed != prev_completed || workers_active == 0 || columns_completed != N)
+        :: task_column[2] == -1 ->
+            if :: next_col < N -> task_column[2] = next_col; next_col++
+               :: else         -> task_column[2] = N
+            fi
+        :: else ->  // все воркеры заняты - ждём: завершения или освобождения слота
+            (workers_active == 0 ||
+             task_column[0] == -1 || task_column[1] == -1 || task_column[2] == -1)
         fi
     :: else -> break
     od;
@@ -137,8 +143,8 @@ proctype Worker(byte wid)
                 i++
             :: else -> break
             od
-            columns_completed++;   // сообщаем менеджеру о завершении столбца
-            task_column[wid] = -1; // готов к новой задаче
+            task_column[wid] = -1; // освобождаем слот (менеджер увидит при пробуждении)
+            columns_completed++;   // сигнал менеджеру: прогресс сделан
         fi
     od;
     workers_active--;
@@ -148,16 +154,20 @@ proctype Worker(byte wid)
 #define no_active_workers   (workers_active == 0)
 #define some_workers_active (workers_active > 0)
 #define valid_product \
-    (C[0]==30 && C[1]==47 && C[2]==39 && C[3]==81 && \
-     C[4]==90 && C[5]==48 && C[6]==66 && C[7]==61 && \
-     C[8]==15)
+    (C[0]==60 && C[1]==77 && C[2]==74 && C[3]==39 && \
+     C[4]==62 && C[5]==75 && C[6]==79 && C[7]==34 && \
+     C[8]==24 && C[9]==75 && C[10]==61 && C[11]==49 && \
+     C[12]==88 && C[13]==114 && C[14]==113 && C[15]==59)
 #define valid_worker_count  (workers_active >= 0 && workers_active <= P)
 #define task_bounds_ok \
     ((task_column[0] >= -1 && task_column[0] <= N) && \
-     (task_column[1] >= -1 && task_column[1] <= N))
+     (task_column[1] >= -1 && task_column[1] <= N) && \
+     (task_column[2] >= -1 && task_column[2] <= N))
 
 #define no_dup_01 (task_column[0] == -1 || task_column[0] == N || task_column[0] != task_column[1])
-#define no_col_conflict (no_dup_01)
+#define no_dup_02 (task_column[0] == -1 || task_column[0] == N || task_column[0] != task_column[2])
+#define no_dup_12 (task_column[1] == -1 || task_column[1] == N || task_column[1] != task_column[2])
+#define no_col_conflict (no_dup_01 && no_dup_02 && no_dup_12)
 
 
 // счётчик воркеров никогда не выходит за [0, P]

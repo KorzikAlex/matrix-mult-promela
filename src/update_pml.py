@@ -76,10 +76,11 @@ def gen_manager_if(P: int) -> str:
             f"               :: else         -> task_column[{p}] = N",
             f"            fi",
         ]
+    free_checks = " || ".join(f"task_column[{p}] == -1" for p in range(P))
     lines += [
-        "        :: else ->  // все воркеры заняты — ждём завершения хотя бы одного",
-        "            prev_completed = columns_completed;",
-        "            (columns_completed != prev_completed || workers_active == 0)",
+        "        :: else ->  // все воркеры заняты - ждём: завершения или освобождения слота",
+        f"            (workers_active == 0 ||",
+        f"             {free_checks})",
         "        fi",
         "    :: else -> break",
         "    od;",
